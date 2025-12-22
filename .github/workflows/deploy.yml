@@ -1,0 +1,68 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    name: Deploy Frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: content-analysis-frontend
+          directory: ./frontend/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    name: Deploy Backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm install
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ./backend
+          secrets: |
+            DEEPSEEK_API_KEY
+            DOUBAO_API_KEY
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DOUBAO_API_KEY: ${{ secrets.DOUBAO_API_KEY }}

@@ -1,0 +1,6 @@
+name = "content-analysis-backend"
+main = "src/index.ts"
+compatibility_date = "2023-12-01"
+
+[vars]
+# API Keys will be set in Cloudflare dashboard or .dev.vars
