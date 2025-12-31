@@ -37,7 +37,7 @@ function App() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/analyze', {
+      const response = await fetch('https://xiaohongshu-test-backend.578642435.workers.dev/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +138,7 @@ function App() {
                 <span className="font-medium">评论数:</span>
                 <span>{result.commentCount}</span>
               </div>
-              
+
               <div className="border-t border-gray-100 pt-4">
                 <div className="flex items-center space-x-2 text-gray-700 mb-2">
                   <Tag className="h-5 w-5 text-gray-400" />
