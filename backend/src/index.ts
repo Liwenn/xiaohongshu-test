@@ -49,6 +49,15 @@ async function analyzeWithOpenAICompatible(
     })
 
     const data: any = await response.json()
+
+    if (!response.ok) {
+      return { error: `API Error (${response.status}): ${JSON.stringify(data)}` }
+    }
+
+    if (data.error) {
+      return { error: `API Error: ${JSON.stringify(data.error)}` }
+    }
+
     if (data.choices && data.choices.length > 0) {
       const contentStr = data.choices[0].message.content
       try {
@@ -58,10 +67,10 @@ async function analyzeWithOpenAICompatible(
         return { keywords: [], summary: contentStr }
       }
     }
-    return null
-  } catch (e) {
+    return { error: `No choices returned. Response: ${JSON.stringify(data)}` }
+  } catch (e: any) {
     console.error(`Error calling ${model}:`, e)
-    return null
+    return { error: `Exception: ${e.message}` }
   }
 }
 
@@ -72,7 +81,7 @@ async function analyzeWithGemini(
   content: string
 ) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -87,6 +96,15 @@ async function analyzeWithGemini(
     })
 
     const data: any = await response.json()
+
+    if (!response.ok) {
+      return { error: `Gemini API Error (${response.status}): ${JSON.stringify(data)}` }
+    }
+
+    if (data.error) {
+      return { error: `Gemini Error: ${JSON.stringify(data.error)}` }
+    }
+
     if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
       const contentStr = data.candidates[0].content.parts[0].text
       // Clean markdown code blocks if present
@@ -98,10 +116,10 @@ async function analyzeWithGemini(
         return { keywords: [], summary: cleanedStr }
       }
     }
-    return null
-  } catch (e) {
+    return { error: `No candidates returned. Response: ${JSON.stringify(data)}` }
+  } catch (e: any) {
     console.error('Error calling Gemini:', e)
-    return null
+    return { error: `Exception: ${e.message}` }
   }
 }
 
