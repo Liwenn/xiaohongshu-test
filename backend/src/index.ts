@@ -29,7 +29,7 @@ app.post('/api/analyze', async (c) => {
       const urlObj = new URL(url)
       const hostname = urlObj.hostname
       if (!hostname.includes('xiaohongshu.com') && !hostname.includes('weixin.qq.com')) {
-         return c.json({ code: 400, message: 'Only Xiaohongshu and WeChat Official Account links are supported', data: null }, 400)
+        return c.json({ code: 400, message: 'Only Xiaohongshu and WeChat Official Account links are supported', data: null }, 400)
       }
     } catch (e) {
       return c.json({ code: 400, message: 'Invalid URL format', data: null }, 400)
@@ -51,7 +51,7 @@ app.post('/api/analyze', async (c) => {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       })
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch URL: ${response.status}`)
       }
@@ -67,7 +67,7 @@ app.post('/api/analyze', async (c) => {
         contentData.author = $('meta[name="author"]').attr('content') || $('.author-name').text() || 'Unknown'
         // Read/Comment counts are often dynamic, might not be in static HTML
         contentData.rawText = $('div.desc').text() || $('div.content').text() || ''
-        
+
       } else if (url.includes('weixin.qq.com')) {
         // WeChat extraction logic
         contentData.title = $('meta[property="og:title"]').attr('content') || $('#activity-name').text().trim() || ''
@@ -75,7 +75,7 @@ app.post('/api/analyze', async (c) => {
         contentData.rawText = $('#js_content').text().trim() || ''
         // WeChat read stats are loaded dynamically via JS, hard to get via simple fetch
       }
-      
+
       // Fallback if rawText is empty, use title
       if (!contentData.rawText) {
         contentData.rawText = contentData.title;
@@ -88,7 +88,8 @@ app.post('/api/analyze', async (c) => {
 
     // 3. AI Analysis
     let keywords: string[] = []
-    
+    let summary: string = ''
+
     // Mock AI analysis if no key provided, or implement actual call
     if (c.env.DEEPSEEK_API_KEY) {
       try {
@@ -103,29 +104,40 @@ app.post('/api/analyze', async (c) => {
             messages: [
               {
                 role: "system",
-                content: "You are a content analyst. Extract 5-8 keywords from the provided text. Return ONLY the keywords separated by commas."
+                content: "You are a content analyst. Analyze the provided text. \n1. Extract 5-8 keywords. \n2. Summarize the content into exactly 3 key points (sentences). \nReturn the result in strictly valid JSON format like this: {\"keywords\": [\"tag1\", \"tag2\"], \"summary\": \"1. Point one\\n2. Point two\\n3. Point three\"}"
               },
               {
                 role: "user",
-                content: `Title: ${contentData.title}\nContent: ${contentData.rawText.substring(0, 2000)}`
+                content: `Title: ${contentData.title}\nContent: ${contentData.rawText.substring(0, 3000)}`
               }
-            ]
+            ],
+            response_format: { type: 'json_object' }
           })
         })
-        
+
         const aiData: any = await aiResponse.json()
         if (aiData.choices && aiData.choices.length > 0) {
           const content = aiData.choices[0].message.content
-          keywords = content.split(/,|，|、/).map((k: string) => k.trim()).filter((k: string) => k.length > 0)
+          try {
+            const parsed = JSON.parse(content)
+            keywords = parsed.keywords || []
+            summary = parsed.summary || ''
+          } catch (parseError) {
+            console.error('JSON Parse Error:', parseError)
+            // Fallback for plain text response
+            keywords = content.split(/,|，|、/).map((k: string) => k.trim()).filter((k: string) => k.length > 0).slice(0, 8)
+          }
         }
       } catch (e) {
         console.error('AI API error:', e)
         // Fallback or ignore
         keywords = ['AI Error', 'Analysis Failed']
+        summary = 'AI analysis failed due to an error.'
       }
     } else {
       // Mock keywords for demo if no API key
       keywords = ['Demo', 'Analysis', 'No API Key', 'Test']
+      summary = '1. This is a demo summary point 1.\n2. This is a demo summary point 2.\n3. Please configure API Key for real analysis.'
     }
 
     return c.json({
@@ -133,7 +145,8 @@ app.post('/api/analyze', async (c) => {
       message: 'Success',
       data: {
         ...contentData,
-        keywords
+        keywords,
+        summary
       }
     })
 

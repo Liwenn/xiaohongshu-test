@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Loader2, Search, Tag, BookOpen, MessageCircle, User } from 'lucide-react';
 
 interface AnalysisResult {
+  title: string;
   author: string;
   readCount: string;
   commentCount: string;
@@ -152,6 +153,18 @@ function App() {
                   ))}
                 </div>
               </div>
+
+              {result.summary && (
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center space-x-2 text-gray-700 mb-2">
+                    <BookOpen className="h-5 w-5 text-gray-400" />
+                    <span className="font-medium">文章摘要:</span>
+                  </div>
+                  <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md whitespace-pre-line">
+                    {result.summary}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
