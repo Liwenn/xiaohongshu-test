@@ -4,7 +4,9 @@ import * as cheerio from 'cheerio'
 
 type Bindings = {
   DEEPSEEK_API_KEY: string
-  DOUBAO_API_KEY: string
+  OPENAI_API_KEY: string
+  GEMINI_API_KEY: string
+  QWEN_API_KEY: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -14,6 +16,94 @@ app.use('/*', cors())
 app.get('/', (c) => {
   return c.text('Content Analysis AI Backend is running!')
 })
+
+// Helper function for OpenAI compatible APIs
+async function analyzeWithOpenAICompatible(
+  apiKey: string,
+  endpoint: string,
+  model: string,
+  title: string,
+  content: string
+) {
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: "system",
+            content: "You are a content analyst. Analyze the provided text. \n1. Extract 5-8 keywords. \n2. Summarize the content into exactly 3 key points (sentences). \nReturn the result in strictly valid JSON format like this: {\"keywords\": [\"tag1\", \"tag2\"], \"summary\": \"1. Point one\\n2. Point two\\n3. Point three\"}"
+          },
+          {
+            role: "user",
+            content: `Title: ${title}\nContent: ${content.substring(0, 3000)}`
+          }
+        ],
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    const data: any = await response.json()
+    if (data.choices && data.choices.length > 0) {
+      const contentStr = data.choices[0].message.content
+      try {
+        return JSON.parse(contentStr)
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError)
+        return { keywords: [], summary: contentStr }
+      }
+    }
+    return null
+  } catch (e) {
+    console.error(`Error calling ${model}:`, e)
+    return null
+  }
+}
+
+// Helper function for Gemini API
+async function analyzeWithGemini(
+  apiKey: string,
+  title: string,
+  content: string
+) {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `You are a content analyst. Analyze the provided text. \n1. Extract 5-8 keywords. \n2. Summarize the content into exactly 3 key points (sentences). \nReturn the result in strictly valid JSON format like this: {"keywords": ["tag1", "tag2"], "summary": "1. Point one\\n2. Point two\\n3. Point three"} \n\nTitle: ${title}\nContent: ${content.substring(0, 3000)}`
+          }]
+        }]
+      })
+    })
+
+    const data: any = await response.json()
+    if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+      const contentStr = data.candidates[0].content.parts[0].text
+      // Clean markdown code blocks if present
+      const cleanedStr = contentStr.replace(/```json/g, '').replace(/```/g, '').trim()
+      try {
+        return JSON.parse(cleanedStr)
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError)
+        return { keywords: [], summary: cleanedStr }
+      }
+    }
+    return null
+  } catch (e) {
+    console.error('Error calling Gemini:', e)
+    return null
+  }
+}
 
 app.post('/api/analyze', async (c) => {
   try {
@@ -86,58 +176,75 @@ app.post('/api/analyze', async (c) => {
       return c.json({ code: 500, message: `Failed to crawl content: ${e.message}`, data: null }, 500)
     }
 
-    // 3. AI Analysis
-    let keywords: string[] = []
-    let summary: string = ''
+    // 3. AI Analysis - Multi Provider
+    const results: Record<string, any> = {}
+    const promises: Promise<void>[] = []
 
-    // Mock AI analysis if no key provided, or implement actual call
-    if (c.env.DEEPSEEK_API_KEY) {
+    // Helper to run analysis and assign to results
+    const runAnalysis = async (providerName: string, task: Promise<any>) => {
       try {
-        const aiResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${c.env.DEEPSEEK_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: "deepseek-chat",
-            messages: [
-              {
-                role: "system",
-                content: "You are a content analyst. Analyze the provided text. \n1. Extract 5-8 keywords. \n2. Summarize the content into exactly 3 key points (sentences). \nReturn the result in strictly valid JSON format like this: {\"keywords\": [\"tag1\", \"tag2\"], \"summary\": \"1. Point one\\n2. Point two\\n3. Point three\"}"
-              },
-              {
-                role: "user",
-                content: `Title: ${contentData.title}\nContent: ${contentData.rawText.substring(0, 3000)}`
-              }
-            ],
-            response_format: { type: 'json_object' }
-          })
-        })
-
-        const aiData: any = await aiResponse.json()
-        if (aiData.choices && aiData.choices.length > 0) {
-          const content = aiData.choices[0].message.content
-          try {
-            const parsed = JSON.parse(content)
-            keywords = parsed.keywords || []
-            summary = parsed.summary || ''
-          } catch (parseError) {
-            console.error('JSON Parse Error:', parseError)
-            // Fallback for plain text response
-            keywords = content.split(/,|，|、/).map((k: string) => k.trim()).filter((k: string) => k.length > 0).slice(0, 8)
-          }
+        const res = await task
+        if (res) {
+          results[providerName] = res
+        } else {
+          results[providerName] = { error: 'No data returned' }
         }
-      } catch (e) {
-        console.error('AI API error:', e)
-        // Fallback or ignore
-        keywords = ['AI Error', 'Analysis Failed']
-        summary = 'AI analysis failed due to an error.'
+      } catch (err: any) {
+        results[providerName] = { error: err.message }
+      }
+    }
+
+    // 1. DeepSeek
+    if (c.env.DEEPSEEK_API_KEY) {
+      promises.push(runAnalysis('DeepSeek', analyzeWithOpenAICompatible(
+        c.env.DEEPSEEK_API_KEY,
+        'https://api.deepseek.com/v1/chat/completions',
+        'deepseek-chat',
+        contentData.title,
+        contentData.rawText
+      )))
+    }
+
+    // 2. OpenAI
+    if (c.env.OPENAI_API_KEY) {
+      promises.push(runAnalysis('OpenAI', analyzeWithOpenAICompatible(
+        c.env.OPENAI_API_KEY,
+        'https://api.openai.com/v1/chat/completions',
+        'gpt-3.5-turbo',
+        contentData.title,
+        contentData.rawText
+      )))
+    }
+
+    // 3. Gemini
+    if (c.env.GEMINI_API_KEY) {
+      promises.push(runAnalysis('Gemini', analyzeWithGemini(
+        c.env.GEMINI_API_KEY,
+        contentData.title,
+        contentData.rawText
+      )))
+    }
+
+    // 4. Qwen (DashScope)
+    // Note: DashScope is OpenAI compatible at specific endpoint
+    if (c.env.QWEN_API_KEY) {
+      promises.push(runAnalysis('Qwen', analyzeWithOpenAICompatible(
+        c.env.QWEN_API_KEY,
+        'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        'qwen-turbo',
+        contentData.title,
+        contentData.rawText
+      )))
+    }
+
+    // If no keys configured, add Demo
+    if (promises.length === 0) {
+      results['Demo'] = {
+        keywords: ['Demo', 'No API Key Configured'],
+        summary: '1. Please configure API keys in Cloudflare.\n2. Supported: DeepSeek, OpenAI, Gemini, Qwen.\n3. This is a demo result.'
       }
     } else {
-      // Mock keywords for demo if no API key
-      keywords = ['Demo', 'Analysis', 'No API Key', 'Test']
-      summary = '1. This is a demo summary point 1.\n2. This is a demo summary point 2.\n3. Please configure API Key for real analysis.'
+      await Promise.all(promises)
     }
 
     return c.json({
@@ -145,8 +252,7 @@ app.post('/api/analyze', async (c) => {
       message: 'Success',
       data: {
         ...contentData,
-        keywords,
-        summary
+        aiResults: results
       }
     })
 

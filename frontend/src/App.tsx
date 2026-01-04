@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { Loader2, Search, Tag, BookOpen, MessageCircle, User } from 'lucide-react';
 
+interface AIResult {
+  keywords: string[];
+  summary: string;
+  error?: string;
+}
+
 interface AnalysisResult {
   title: string;
   author: string;
   readCount: string;
   commentCount: string;
-  keywords: string[];
-  summary?: string;
+  aiResults: Record<string, AIResult>;
 }
 
 function App() {
@@ -15,6 +20,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('');
 
   const validateUrl = (input: string) => {
     try {
@@ -36,6 +42,7 @@ function App() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setActiveTab('');
 
     try {
       const response = await fetch('https://xiaohongshu-test-backend.578642435.workers.dev/api/analyze', {
@@ -53,6 +60,11 @@ function App() {
       }
 
       setResult(data.data);
+      // Set first available provider as active tab
+      const providers = Object.keys(data.data.aiResults || {});
+      if (providers.length > 0) {
+        setActiveTab(providers[0]);
+      }
     } catch (err: any) {
       setError(err.message || '请求出错，请稍后重试');
     } finally {
@@ -141,30 +153,79 @@ function App() {
               </div>
 
               <div className="border-t border-gray-100 pt-4">
-                <div className="flex items-center space-x-2 text-gray-700 mb-2">
-                  <Tag className="h-5 w-5 text-gray-400" />
-                  <span className="font-medium">关键词:</span>
+                <div className="mb-4">
+                  <div className="sm:hidden">
+                    <label htmlFor="tabs" className="sr-only">Select a tab</label>
+                    <select
+                      id="tabs"
+                      name="tabs"
+                      className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                      value={activeTab}
+                      onChange={(e) => setActiveTab(e.target.value)}
+                    >
+                      {Object.keys(result.aiResults).map((provider) => (
+                        <option key={provider} value={provider}>{provider}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="hidden sm:block">
+                    <div className="border-b border-gray-200">
+                      <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                        {Object.keys(result.aiResults).map((provider) => (
+                          <button
+                            key={provider}
+                            onClick={() => setActiveTab(provider)}
+                            className={`${activeTab === provider
+                                ? 'border-indigo-500 text-indigo-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                          >
+                            {provider} 分析结果
+                          </button>
+                        ))}
+                      </nav>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {result.keywords.map((keyword, index) => (
-                    <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                      {keyword}
-                    </span>
-                  ))}
-                </div>
-              </div>
 
-              {result.summary && (
-                <div className="border-t border-gray-100 pt-4">
-                  <div className="flex items-center space-x-2 text-gray-700 mb-2">
-                    <BookOpen className="h-5 w-5 text-gray-400" />
-                    <span className="font-medium">文章摘要:</span>
+                {activeTab && result.aiResults[activeTab] && (
+                  <div className="space-y-4">
+                    {result.aiResults[activeTab].error ? (
+                      <div className="rounded-md bg-red-50 p-4">
+                        <p className="text-sm text-red-700">分析出错: {result.aiResults[activeTab].error}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <div className="flex items-center space-x-2 text-gray-700 mb-2">
+                            <Tag className="h-5 w-5 text-gray-400" />
+                            <span className="font-medium">关键词 ({activeTab}):</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {result.aiResults[activeTab].keywords.map((keyword, index) => (
+                              <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                {keyword}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {result.aiResults[activeTab].summary && (
+                          <div>
+                            <div className="flex items-center space-x-2 text-gray-700 mb-2">
+                              <BookOpen className="h-5 w-5 text-gray-400" />
+                              <span className="font-medium">文章摘要 ({activeTab}):</span>
+                            </div>
+                            <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md whitespace-pre-line">
+                              {result.aiResults[activeTab].summary}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md whitespace-pre-line">
-                    {result.summary}
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         )}
