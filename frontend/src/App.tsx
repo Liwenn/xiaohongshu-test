@@ -154,38 +154,20 @@ function App() {
 
               <div className="border-t border-gray-100 pt-4">
                 <div className="mb-4">
-                  <div className="sm:hidden">
-                    <label htmlFor="tabs" className="sr-only">Select a tab</label>
-                    <select
-                      id="tabs"
-                      name="tabs"
-                      className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                      value={activeTab}
-                      onChange={(e) => setActiveTab(e.target.value)}
-                    >
-                      {Object.keys(result.aiResults).map((provider) => (
-                        <option key={provider} value={provider}>{provider}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="hidden sm:block">
-                    <div className="border-b border-gray-200">
-                      <nav className="-mb-px flex space-x-4 overflow-x-auto pb-1" aria-label="Tabs">
-                        {Object.keys(result.aiResults).map((provider) => (
-                          <button
-                            key={provider}
-                            onClick={() => setActiveTab(provider)}
-                            className={`${activeTab === provider
-                              ? 'border-indigo-500 text-indigo-600 bg-indigo-50'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                              } whitespace-nowrap py-2 px-4 border-b-2 font-medium text-sm rounded-t-md transition-colors duration-200`}
-                          >
-                            {provider}
-                          </button>
-                        ))}
-                      </nav>
-                    </div>
-                  </div>
+                  <nav className="flex flex-wrap gap-2" aria-label="Tabs">
+                    {Object.keys(result.aiResults).map((provider) => (
+                      <button
+                        key={provider}
+                        onClick={() => setActiveTab(provider)}
+                        className={`${activeTab === provider
+                          ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                          : 'bg-gray-100 text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                          } px-4 py-2 font-medium text-sm rounded-full transition-all duration-200`}
+                      >
+                        {provider}
+                      </button>
+                    ))}
+                  </nav>
                 </div>
 
                 {activeTab && result.aiResults[activeTab] && (
