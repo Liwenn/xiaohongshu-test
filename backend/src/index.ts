@@ -248,6 +248,7 @@ app.post('/api/analyze', async (c) => {
       results['Qwen'] = { error: 'API Key not configured' }
     }
 
+    // Force wait for all promises to ensure results are populated
     await Promise.all(promises)
 
 
