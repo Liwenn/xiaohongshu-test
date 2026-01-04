@@ -185,9 +185,13 @@ app.post('/api/analyze', async (c) => {
       try {
         const res = await task
         if (res) {
-          results[providerName] = res
+          if (res.error) {
+            results[providerName] = { error: res.error }
+          } else {
+            results[providerName] = res
+          }
         } else {
-          results[providerName] = { error: 'No data returned' }
+          results[providerName] = { error: 'No data returned (Unknown error)' }
         }
       } catch (err: any) {
         results[providerName] = { error: err.message }
@@ -203,6 +207,8 @@ app.post('/api/analyze', async (c) => {
         contentData.title,
         contentData.rawText
       )))
+    } else {
+      results['DeepSeek'] = { error: 'API Key not configured' }
     }
 
     // 2. OpenAI
@@ -214,6 +220,8 @@ app.post('/api/analyze', async (c) => {
         contentData.title,
         contentData.rawText
       )))
+    } else {
+      results['OpenAI'] = { error: 'API Key not configured' }
     }
 
     // 3. Gemini
@@ -223,10 +231,11 @@ app.post('/api/analyze', async (c) => {
         contentData.title,
         contentData.rawText
       )))
+    } else {
+      results['Gemini'] = { error: 'API Key not configured' }
     }
 
     // 4. Qwen (DashScope)
-    // Note: DashScope is OpenAI compatible at specific endpoint
     if (c.env.QWEN_API_KEY) {
       promises.push(runAnalysis('Qwen', analyzeWithOpenAICompatible(
         c.env.QWEN_API_KEY,
@@ -235,17 +244,12 @@ app.post('/api/analyze', async (c) => {
         contentData.title,
         contentData.rawText
       )))
+    } else {
+      results['Qwen'] = { error: 'API Key not configured' }
     }
 
-    // If no keys configured, add Demo
-    if (promises.length === 0) {
-      results['Demo'] = {
-        keywords: ['Demo', 'No API Key Configured'],
-        summary: '1. Please configure API keys in Cloudflare.\n2. Supported: DeepSeek, OpenAI, Gemini, Qwen.\n3. This is a demo result.'
-      }
-    } else {
-      await Promise.all(promises)
-    }
+    await Promise.all(promises)
+
 
     return c.json({
       code: 200,
